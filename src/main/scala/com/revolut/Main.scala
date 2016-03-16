@@ -4,6 +4,7 @@ import akka.actor.{Props, ActorSystem}
 import akka.pattern.ask
 import akka.util.Timeout
 import com.revolut.actors.AccountOperations.{GetAllAccounts, DeleteAccount, SaveAccount, GetAccountById}
+import com.revolut.actors.AccountTransferOperationResult.GetAccountTransferListResult
 import com.revolut.actors.AccountTransferOperations.{SaveAccountTransfer, GetAllAccountTransfers}
 import com.revolut.actors._
 import com.revolut.model.{AccountTransfer, Account}
@@ -90,8 +91,8 @@ object Main extends App with SimpleRoutingApp with DefaultJsonProtocol {
     path("accounts" / "transfers" / "all") {
       complete {
         (controllerActor ? GetAllAccountTransfers())
-          .mapTo[List[AccountTransfer]]
-          .map(_.toJson.toString)
+          .mapTo[GetAccountTransferListResult]
+          .map(_.data.toJson.toString)
       }
     }
   }
