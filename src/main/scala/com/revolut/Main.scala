@@ -3,8 +3,10 @@ package com.revolut
 import akka.actor.{Props, ActorSystem}
 import akka.pattern.ask
 import akka.util.Timeout
+import com.revolut.actors.AccountOperations.{GetAllAccounts, DeleteAccount, SaveAccount, GetAccountById}
+import com.revolut.actors.AccountTransferOperations.{SaveAccountTransfer, GetAllAccountTransfers}
 import com.revolut.actors._
-import com.revolut.model.Account
+import com.revolut.model.{AccountTransfer, Account}
 import spray.json._
 import spray.json.DefaultJsonProtocol
 import spray.httpx.SprayJsonSupport.sprayJsonUnmarshaller
@@ -15,10 +17,12 @@ import scala.concurrent.duration._
 object Main extends App with SimpleRoutingApp with DefaultJsonProtocol {
 
   implicit val system = ActorSystem()
-  lazy val storageActor = system.actorOf(Props[StorageActor], "storage-actor")
 
-  implicit val timeout = Timeout(5.second)
+  lazy val controllerActor = system.actorOf(Props[ControllerActor], "controller-actor")
+
+  implicit val timeout = Timeout (3 second)
   implicit val accountFormat = jsonFormat4(Account)
+  implicit val accountTransferFormat = jsonFormat6(AccountTransfer)
 
   import system.dispatcher
 
@@ -26,12 +30,11 @@ object Main extends App with SimpleRoutingApp with DefaultJsonProtocol {
     path("accounts" / IntNumber) {
       id =>
         complete {
-          (storageActor ? Get(id))
+          (controllerActor ? GetAccountById(id))
             .mapTo[Option[Account]]
             .map(_.flatMap(x => Some(x.toJson.toString)).getOrElse("Account not found"))
         }
     }
-
   }
 
   val saveAccount = post {
@@ -40,7 +43,7 @@ object Main extends App with SimpleRoutingApp with DefaultJsonProtocol {
         entity(as[Account]) {
           account =>
             complete {
-              (storageActor ? Save(account))
+              (controllerActor ? SaveAccount(account))
                 .mapTo[String]
             }
         }
@@ -52,17 +55,42 @@ object Main extends App with SimpleRoutingApp with DefaultJsonProtocol {
     path("accounts" / IntNumber) {
       id =>
         complete {
-          (storageActor ? Delete(id)).
+          (controllerActor ? DeleteAccount(id)).
             mapTo[String]
         }
     }
   }
 
-  val getAll = get {
+  val getAllAccounts = get {
     path("accounts" / "all") {
       complete {
-        (storageActor ? GetAll())
+        (controllerActor ? GetAllAccounts())
           .mapTo[List[Account]]
+          .map(_.toJson.toString)
+      }
+    }
+  }
+
+  val saveAccountTransfer = post {
+    path("accounts" / "transfers" / "save") {
+      detach() {
+        entity(as[AccountTransfer]) {
+          accountTransfer =>
+            complete {
+              (controllerActor ? SaveAccountTransfer(accountTransfer))
+                .mapTo[List[AccountTransfer]]
+                .map(_.toJson.toString)
+            }
+        }
+      }
+    }
+  }
+
+  val getAllAccountTransfers = get {
+    path("accounts" / "transfers" / "all") {
+      complete {
+        (controllerActor ? GetAllAccountTransfers())
+          .mapTo[List[AccountTransfer]]
           .map(_.toJson.toString)
       }
     }
@@ -72,7 +100,9 @@ object Main extends App with SimpleRoutingApp with DefaultJsonProtocol {
     getAccount ~
       saveAccount ~
       deleteAccount ~
-      getAll
+      getAllAccounts ~
+      saveAccountTransfer ~
+      getAllAccountTransfers
   }
 
 }
