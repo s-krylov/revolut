@@ -5,7 +5,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.revolut.actors.AccountOperations.{GetAllAccounts, DeleteAccount, SaveAccount, GetAccountById}
 import com.revolut.actors.AccountTransferOperationResult.GetAccountTransferListResult
-import com.revolut.actors.AccountTransferOperations.{SaveAccountTransfer, GetAllAccountTransfers}
+import com.revolut.actors.AccountTransferOperations.{GetAccountTransfersByAccNumberAndBic, SaveAccountTransfer, GetAllAccountTransfers}
 import com.revolut.actors._
 import com.revolut.model.{AccountTransfer, Account}
 import spray.json._
@@ -91,9 +91,20 @@ object Main extends App with SimpleRoutingApp with DefaultJsonProtocol {
     path("accounts" / "transfers" / "all") {
       complete {
         (controllerActor ? GetAllAccountTransfers())
-          .mapTo[GetAccountTransferListResult]
-          .map(_.data.toJson.toString)
+          .mapTo[List[AccountTransfer]]
+          .map(_.toJson.toString)
       }
+    }
+  }
+
+  val getAccountTransfersByBicAndNumber = get {
+    path("accounts" / "transfers" / Segment/ Segment) {
+      (bic, number) =>
+        complete {
+          (controllerActor ? GetAccountTransfersByAccNumberAndBic(bic, number))
+            .mapTo[List[AccountTransfer]]
+            .map(_.toJson.toString)
+        }
     }
   }
 
@@ -103,7 +114,8 @@ object Main extends App with SimpleRoutingApp with DefaultJsonProtocol {
       deleteAccount ~
       getAllAccounts ~
       saveAccountTransfer ~
-      getAllAccountTransfers
+      getAllAccountTransfers ~
+      getAccountTransfersByBicAndNumber
   }
 
 }

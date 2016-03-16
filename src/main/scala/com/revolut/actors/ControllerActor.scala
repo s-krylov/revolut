@@ -5,7 +5,7 @@ import akka.actor.{Props, Actor}
 import com.revolut.actors.AccountOperationResults.{GetAccountListResult, GetAccountResult}
 import com.revolut.actors.AccountOperations._
 import com.revolut.actors.AccountTransferOperationResult.{GetAccountTransferListResult, GetAccountTransferResult}
-import com.revolut.actors.AccountTransferOperations.{GetAllAccountTransfers, SaveAccountTransfer}
+import com.revolut.actors.AccountTransferOperations.{GetAccountTransfersByAccNumberAndBic, GetAllAccountTransfers, SaveAccountTransfer}
 
 class ControllerActor extends Actor {
 
@@ -15,22 +15,22 @@ class ControllerActor extends Actor {
   lazy val accountStorageActor = context.actorOf(Props[AccountStorageActor], "account-storage-actor")
   lazy val accountTransferStorageActor = context.actorOf(Props[AccountTransferStorageActor], "transfer-storage-actor")
 
-  override def receive = {
-    case SaveAccount(account) =>
+  def receive = {
+    case msg @ SaveAccount(account) =>
       val s = sender
-      (accountStorageActor ? SaveAccount(account))
+      (accountStorageActor ? msg)
         .mapTo[GetAccountResult]
         .foreach(_ => s ! "Account saved successfully")
 
-    case GetAccountById(id) =>
+    case msg @ GetAccountById(id) =>
       val s = sender
-      (accountStorageActor ? GetAccountById(id))
+      (accountStorageActor ? msg)
         .mapTo[GetAccountResult]
         .foreach(s ! _.account)
 
-    case DeleteAccount(id) =>
+    case msg @ DeleteAccount(id) =>
       val s = sender
-      (accountStorageActor ? DeleteAccount(id))
+      (accountStorageActor ? msg)
         .mapTo[GetAccountResult]
         .map(_.account.flatMap(_ => Some("Account successfully deleted")).getOrElse("Account not found"))
         .foreach(s ! _)
@@ -43,12 +43,10 @@ class ControllerActor extends Actor {
 
     case SaveAccountTransfer(accountTransfer) =>
       val s = sender
-      val clientAccountFuture = (accountStorageActor ? GetAccountByBicAndNumber(accountTransfer.clientAccountBic,
-        accountTransfer.clientAccountNumber))
-        .mapTo[GetAccountResult]
-      val recipientAccountFuture = (accountStorageActor ? GetAccountByBicAndNumber(accountTransfer.recipientAccountBic,
-        accountTransfer.recipientAccountNumber))
-        .mapTo[GetAccountResult]
+      val clientAccountFuture = accountStorageActor ? GetAccountByBicAndNumber(accountTransfer.clientAccountBic,
+        accountTransfer.clientAccountNumber)
+      val recipientAccountFuture = accountStorageActor ? GetAccountByBicAndNumber(accountTransfer.recipientAccountBic,
+        accountTransfer.recipientAccountNumber)
 
       (clientAccountFuture zip recipientAccountFuture)
         .mapTo[(GetAccountResult, GetAccountResult)]
@@ -62,7 +60,7 @@ class ControllerActor extends Actor {
               (accountStorageActor ? SaveAccount(recipientAccount)) zip
               (accountTransferStorageActor ? SaveAccountTransfer(accountTransfer)))
                 .mapTo[((GetAccountResult, GetAccountResult), GetAccountTransferResult)]
-                .foreach {a =>
+                .foreach { a =>
                   val ((x, y), _) = a
                   s ! List(x.account.get, y.account.get)
                 }
@@ -72,6 +70,12 @@ class ControllerActor extends Actor {
     case GetAllAccountTransfers() =>
       val s = sender
       (accountTransferStorageActor ? GetAllAccountTransfers())
+        .mapTo[GetAccountTransferListResult]
+        .foreach(s ! _.data)
+
+    case msg @ GetAccountTransfersByAccNumberAndBic(bic, accountNumber) =>
+      val s = sender
+      (accountTransferStorageActor ? msg)
         .mapTo[GetAccountTransferListResult]
         .foreach(s ! _.data)
   }
