@@ -78,7 +78,7 @@ object Main extends App with SimpleRoutingApp with DefaultJsonProtocol {
           accountTransfer =>
             complete {
               (controllerActor ? SaveAccountTransfer(accountTransfer))
-                .mapTo[List[AccountTransfer]]
+                .mapTo[List[Account]]
                 .map(_.toJson.toString)
             }
         }
